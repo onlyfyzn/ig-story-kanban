@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DndContext, DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Columns, type Card } from "@/lib/schema";
-import { canvaEmbedUrl } from "@/lib/canva";
+import { canvaEmbedUrl, tryCanvaOembed } from "@/lib/canva";
 import { supabase } from "@/lib/supabase";
 
 const STORAGE_KEY = "ig_story_kanban_v2";
@@ -90,6 +90,7 @@ export default function Page() {
   const [preview, setPreview] = useState<{ title: string; url: string } | null>(null);
 
   const [syncMode, setSyncMode] = useState<"local" | "supabase">("local");
+  const [canvaThumb, setCanvaThumb] = useState<Record<string, string>>({});
 
   useEffect(() => {
     // start local
@@ -119,6 +120,26 @@ export default function Page() {
       void upsertRemote(cards);
     }
   }, [cards, syncMode]);
+
+  // best-effort: fetch Canva thumbnail via oEmbed for nicer card previews
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const next: Record<string, string> = {};
+      const toFetch = cards.filter((c) => c.canvaUrl && !canvaThumb[c.id]).slice(0, 10);
+      for (const c of toFetch) {
+        const meta = await tryCanvaOembed(c.canvaUrl || "");
+        if (meta?.thumbnail_url) next[c.id] = meta.thumbnail_url;
+      }
+      if (!cancelled && Object.keys(next).length) {
+        setCanvaThumb((prev) => ({ ...prev, ...next }));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cards]);
 
   const filtered = useMemo(() => {
     const q = filters.q.trim().toLowerCase();
@@ -301,6 +322,7 @@ export default function Page() {
                       <CardTile
                         key={c.id}
                         card={c}
+                        thumbUrl={canvaThumb[c.id]}
                         onEdit={() => {
                           setEditing(c);
                           setOpen(true);
@@ -478,6 +500,7 @@ export default function Page() {
                 src={preview.url}
                 className="h-full w-full"
                 allow="fullscreen"
+                referrerPolicy="no-referrer"
               />
             </div>
             <div className="border-t px-4 py-2 text-xs text-slate-500">
@@ -499,7 +522,17 @@ function Field({ label, children, className }: { label: string; children: React.
   );
 }
 
-function CardTile({ card, onEdit, onPreview }: { card: Card; onEdit: () => void; onPreview: () => void }) {
+function CardTile({
+  card,
+  thumbUrl,
+  onEdit,
+  onPreview,
+}: {
+  card: Card;
+  thumbUrl?: string;
+  onEdit: () => void;
+  onPreview: () => void;
+}) {
   const due = card.dueDate ? new Date(card.dueDate).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : null;
 
   const prioClass =
@@ -520,6 +553,13 @@ function CardTile({ card, onEdit, onPreview }: { card: Card; onEdit: () => void;
         <div className="text-sm font-semibold leading-snug">{card.title}</div>
         <div className="shrink-0 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-700">IG Story</div>
       </div>
+
+      {thumbUrl ? (
+        <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={thumbUrl} alt="Canva preview" className="h-28 w-full object-cover" />
+        </div>
+      ) : null}
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] ${prioClass}`}>{card.priority}</span>
