@@ -1,19 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { DndContext, DragEndEvent } from "@dnd-kit/core";
-import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Columns, type Card } from "@/lib/schema";
-import { canvaEmbedUrl, tryCanvaOembed } from "@/lib/canva";
-import { supabase } from "@/lib/supabase";
+import { canvaEmbedUrl } from "@/lib/canva";
 
-const STORAGE_KEY = "ig_story_kanban_v2";
+const STORAGE_KEY = "ig_story_kanban_style_v1";
 
-type Filters = {
-  q: string;
-  owner: "" | "Symone" | "Editor";
-  status: "" | (typeof Columns)[number]["id"];
-  priority: "" | "High" | "Medium" | "Low";
+type Platform = Card["platform"];
+
+const PLATFORM_LABEL: Record<Platform, string> = {
+  ig: "📸 IG Stories",
+  tt: "🎵 TikTok",
+  yt: "▶ YouTube",
+  tw: "𝕏 Twitter",
 };
 
 function nowIso() {
@@ -25,27 +24,65 @@ function demoCards(): Card[] {
   return [
     {
       id: crypto.randomUUID(),
-      title: "Paydai: ‘Commissions aren’t bonuses’ story sequence",
+      status: "script",
+      priority: "high",
+      platform: "ig",
+      slides: "7 slides",
+      title: "Commission Horror Story #4",
+      desc: "Rep gets ghosted after $12K deal closes. Text screenshots + reveal.",
+      tags: ["storytelling", "viral"],
+      dueLabel: "Due Feb 6",
+      assignee: "F",
       canvaUrl: "",
-      notes: "Pull from the HR-forgot-commissions Reddit post. Pain → clarity → relief.",
-      dueDate: "",
-      owner: "Editor",
-      priority: "High",
-      status: "ideation",
-      approvedBy: "",
+      notes: "",
       createdAt: t,
       updatedAt: t,
     },
     {
       id: crypto.randomUUID(),
-      title: "Paydai: ‘Make commission payments boring’ framework",
+      status: "script",
+      priority: "medium",
+      platform: "ig",
+      slides: "5 slides",
+      title: '"3 Signs Your Commission is Being Stolen"',
+      desc: "Educational sequence with red flags every sales rep should know.",
+      tags: ["educational", "hook"],
+      dueLabel: "Due Feb 8",
+      assignee: "J",
       canvaUrl: "",
-      notes: "6–8 slides. 1 idea per slide. End with simple CTA.",
-      dueDate: "",
-      owner: "Symone",
-      priority: "Medium",
-      status: "needs_editing",
-      approvedBy: "",
+      notes: "",
+      createdAt: t,
+      updatedAt: t,
+    },
+    {
+      id: crypto.randomUUID(),
+      status: "design",
+      priority: "medium",
+      platform: "tw",
+      slides: "4 slides",
+      title: '"I Lost $45K in Unpaid Commissions"',
+      desc: "Thread-style story sequence. Personal testimony format.",
+      tags: ["testimonial", "viral"],
+      dueLabel: "Due Feb 7",
+      assignee: "F",
+      canvaUrl: "",
+      notes: "",
+      createdAt: t,
+      updatedAt: t,
+    },
+    {
+      id: crypto.randomUUID(),
+      status: "scheduled",
+      priority: "high",
+      platform: "ig",
+      slides: "8 slides",
+      title: "Commission Horror Story #2",
+      desc: "Full sequence approved. Posting Wed 9 AM EST for peak engagement.",
+      tags: ["storytelling", "viral"],
+      dueLabel: "Feb 5 · 9AM",
+      assignee: "F",
+      canvaUrl: "",
+      notes: "",
       createdAt: t,
       updatedAt: t,
     },
@@ -57,7 +94,7 @@ function loadLocal(): Card[] {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return demoCards();
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : demoCards();
+    return Array.isArray(parsed) ? (parsed as Card[]) : demoCards();
   } catch {
     return demoCards();
   }
@@ -67,291 +104,221 @@ function saveLocal(cards: Card[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
 }
 
-async function upsertRemote(cards: Card[]) {
-  if (!supabase) return;
-  // naive sync: upsert all cards
-  await supabase.from("ig_story_cards").upsert(cards);
-}
-
-async function loadRemote(): Promise<Card[] | null> {
-  if (!supabase) return null;
-  const { data, error } = await supabase.from("ig_story_cards").select("*").order("updatedAt", { ascending: false });
-  if (error) return null;
-  return (data as Card[]) || [];
-}
-
 export default function Page() {
   const [cards, setCards] = useState<Card[]>([]);
-  const [filters, setFilters] = useState<Filters>({ q: "", owner: "", status: "", priority: "" });
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOverCol, setDragOverCol] = useState<string | null>(null);
 
-  // modal
-  const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<Card | null>(null);
   const [preview, setPreview] = useState<{ title: string; url: string } | null>(null);
 
-  const [syncMode, setSyncMode] = useState<"local" | "supabase">("local");
-  const [canvaThumb, setCanvaThumb] = useState<Record<string, string>>({});
+  // edit modal
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Card | null>(null);
 
   useEffect(() => {
-    // start local
     setCards(loadLocal());
-  }, []);
-
-  // attempt remote
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const remote = await loadRemote();
-      if (remote && !cancelled) {
-        setCards(remote.length ? remote : demoCards());
-        setSyncMode("supabase");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   useEffect(() => {
     if (!cards.length) return;
     saveLocal(cards);
-    // best-effort remote
-    if (syncMode === "supabase") {
-      void upsertRemote(cards);
-    }
-  }, [cards, syncMode]);
-
-  // best-effort: fetch Canva thumbnail via oEmbed for nicer card previews
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const next: Record<string, string> = {};
-      const toFetch = cards.filter((c) => c.canvaUrl && !canvaThumb[c.id]).slice(0, 10);
-      for (const c of toFetch) {
-        const meta = await tryCanvaOembed(c.canvaUrl || "");
-        if (meta?.thumbnail_url) next[c.id] = meta.thumbnail_url;
-      }
-      if (!cancelled && Object.keys(next).length) {
-        setCanvaThumb((prev) => ({ ...prev, ...next }));
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cards]);
 
-  const filtered = useMemo(() => {
-    const q = filters.q.trim().toLowerCase();
-    return cards.filter((c) => {
-      if (filters.owner && c.owner !== filters.owner) return false;
-      if (filters.status && c.status !== filters.status) return false;
-      if (filters.priority && c.priority !== filters.priority) return false;
-      if (!q) return true;
-      const hay = `${c.title} ${c.notes ?? ""} ${c.canvaUrl ?? ""}`.toLowerCase();
-      return hay.includes(q);
-    });
-  }, [cards, filters]);
+  const totalActive = useMemo(() => cards.filter((c) => c.status !== "published").length, [cards]);
 
   const byColumn = useMemo(() => {
     const map: Record<string, Card[]> = {};
-    for (const col of Columns) map[col.id] = [];
-    for (const c of filtered) map[c.status].push(c);
-    // simple priority ordering
-    const pr = { High: 0, Medium: 1, Low: 2 } as const;
-    for (const col of Columns) {
-      map[col.id].sort((a, b) => (pr[a.priority] ?? 9) - (pr[b.priority] ?? 9));
-    }
+    for (const c of Columns) map[c.id] = [];
+    for (const card of cards) map[card.status].push(card);
     return map;
-  }, [filtered]);
+  }, [cards]);
 
-  function updateCard(id: string, patch: Partial<Card>) {
-    setCards((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, ...patch, updatedAt: nowIso() } : c))
-    );
+  function moveCard(cardId: string, toStatus: Card["status"]) {
+    setCards((prev) => prev.map((c) => (c.id === cardId ? { ...c, status: toStatus, updatedAt: nowIso() } : c)));
   }
 
-  function createOrUpdate(card: Omit<Card, "createdAt" | "updatedAt">) {
+  function insertBefore(cardId: string, beforeId: string | null) {
     setCards((prev) => {
-      const exists = prev.find((c) => c.id === card.id);
-      if (exists) {
-        return prev.map((c) => (c.id === card.id ? { ...c, ...card, updatedAt: nowIso() } : c));
-      }
-      const t = nowIso();
-      return [{ ...card, createdAt: t, updatedAt: t }, ...prev];
+      const idx = prev.findIndex((c) => c.id === cardId);
+      if (idx === -1) return prev;
+      const item = prev[idx];
+      const rest = prev.filter((c) => c.id !== cardId);
+      if (!beforeId) return [item, ...rest];
+      const toIdx = rest.findIndex((c) => c.id === beforeId);
+      if (toIdx === -1) return [item, ...rest];
+      rest.splice(toIdx, 0, item);
+      return rest;
     });
   }
 
-  function remove(id: string) {
-    setCards((prev) => prev.filter((c) => c.id !== id));
+  function openEdit(card: Card) {
+    setEditing(card);
+    setOpen(true);
   }
 
-  function onDragEnd(e: DragEndEvent) {
-    const activeId = String(e.active.id);
-    const overId = e.over?.id ? String(e.over.id) : null;
-    if (!overId) return;
-
-    // overId can be column id or card id
-    const overIsColumn = Columns.some((c) => c.id === overId);
-
-    if (overIsColumn) {
-      updateCard(activeId, { status: overId as Card["status"] });
-      return;
-    }
-
-    // if dropped on another card, reorder within same column
-    const active = cards.find((c) => c.id === activeId);
-    const over = cards.find((c) => c.id === overId);
-    if (!active || !over) return;
-
-    if (active.status !== over.status) {
-      // move to other column, then sort by insert position
-      setCards((prev) => {
-        const next = [...prev];
-        const fromIdx = next.findIndex((c) => c.id === activeId);
-        const toIdx = next.findIndex((c) => c.id === overId);
-        next[fromIdx] = { ...next[fromIdx], status: over.status, updatedAt: nowIso() };
-        return arrayMove(next, fromIdx, toIdx);
-      });
-      return;
-    }
-
-    // same column reorder
-    setCards((prev) => {
-      const fromIdx = prev.findIndex((c) => c.id === activeId);
-      const toIdx = prev.findIndex((c) => c.id === overId);
-      return arrayMove(prev, fromIdx, toIdx);
+  function openNew(status: Card["status"]) {
+    const t = nowIso();
+    setEditing({
+      id: crypto.randomUUID(),
+      status,
+      priority: "medium",
+      platform: "ig",
+      slides: "",
+      title: "",
+      desc: "",
+      tags: [],
+      dueLabel: "",
+      assignee: "F",
+      canvaUrl: "",
+      notes: "",
+      createdAt: t,
+      updatedAt: t,
     });
+    setOpen(true);
+  }
+
+  function saveEdit() {
+    if (!editing) return;
+    setCards((prev) => {
+      const exists = prev.some((c) => c.id === editing.id);
+      if (exists) return prev.map((c) => (c.id === editing.id ? { ...editing, updatedAt: nowIso() } : c));
+      return [{ ...editing, updatedAt: nowIso() }, ...prev];
+    });
+    setOpen(false);
+  }
+
+  function deleteEdit() {
+    if (!editing) return;
+    if (!confirm("Delete this card?") ) return;
+    setCards((prev) => prev.filter((c) => c.id !== editing.id));
+    setOpen(false);
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/80 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-500 to-sky-500" />
-            <div>
-              <div className="text-sm font-semibold">Symone IG Stories — Board</div>
-              <div className="text-xs text-slate-500">
-                Status tracking for Canva story sequences · Sync: <span className="font-medium">{syncMode}</span>
-              </div>
-            </div>
-          </div>
+    <>
+      <div className="grid-bg" />
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                const id = crypto.randomUUID();
-                setEditing({
-                  id,
-                  title: "",
-                  canvaUrl: "",
-                  notes: "",
-                  dueDate: "",
-                  owner: "Editor",
-                  priority: "Medium",
-                  status: "ideation",
-                  approvedBy: "",
-                  createdAt: nowIso(),
-                  updatedAt: nowIso(),
-                });
-                setOpen(true);
-              }}
-              className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
-            >
-              New card
-            </button>
+      <div className="topbar">
+        <div className="topbar-left">
+          {/* simple gradient logo (no external image) */}
+          <div
+            className="topbar-logo"
+            style={{
+              background: "linear-gradient(135deg, var(--purple-bright), var(--purple-mid))",
+              display: "grid",
+              placeItems: "center",
+              fontFamily: "Syne, sans-serif",
+              fontWeight: 800,
+              color: "white",
+              fontSize: 14,
+            }}
+          >
+            S
           </div>
+          <span className="topbar-title">Story Sequences</span>
+          <span className="topbar-divider" />
+          <span className="topbar-section">Kanban Board</span>
         </div>
 
-        <div className="mx-auto max-w-7xl px-4 pb-3">
-          <div className="grid gap-3 md:grid-cols-4">
-            <div className="md:col-span-2">
-              <label className="text-xs font-medium text-slate-600">Search</label>
-              <input
-                value={filters.q}
-                onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400"
-                placeholder="Search title, notes, link…"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-slate-600">Owner</label>
-              <select
-                value={filters.owner}
-                onChange={(e) => setFilters((f) => ({ ...f, owner: e.target.value as Filters["owner"] }))}
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400"
-              >
-                <option value="">All</option>
-                <option value="Symone">Symone</option>
-                <option value="Editor">Editor</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-slate-600">Priority</label>
-              <select
-                value={filters.priority}
-                onChange={(e) => setFilters((f) => ({ ...f, priority: e.target.value as Filters["priority"] }))}
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400"
-              >
-                <option value="">All</option>
-                <option value="High">High</option>
-                <option value="Medium">Medium</option>
-                <option value="Low">Low</option>
-              </select>
-            </div>
+        <div className="topbar-right">
+          <div className="topbar-badge">📊 {totalActive} Active Sequences</div>
+          <div className="client-select" title="Placeholder (multi-client later)">
+            Client: All Clients <span className="arrow">▾</span>
           </div>
         </div>
-      </header>
+      </div>
 
-      <main className="mx-auto max-w-7xl px-4 py-5">
-        <DndContext onDragEnd={onDragEnd}>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-            {Columns.map((col) => (
-              <div key={col.id} className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="flex items-center justify-between rounded-t-2xl bg-slate-100 px-4 py-3">
-                  <div className="text-sm font-semibold">{col.title}</div>
-                  <div className="text-xs text-slate-600">{byColumn[col.id].length}</div>
+      <div className="board-wrapper">
+        <div className="board">
+          {Columns.map((col) => {
+            const list = byColumn[col.id] || [];
+            return (
+              <div
+                key={col.id}
+                className={`column ${dragOverCol === col.id ? "drag-over" : ""}`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOverCol(col.id);
+                }}
+                onDragLeave={() => setDragOverCol(null)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOverCol(null);
+                  const cardId = e.dataTransfer.getData("text/plain");
+                  if (cardId) moveCard(cardId, col.id);
+                }}
+              >
+                <div className="column-header">
+                  <div className="col-header-left">
+                    <div className={`col-dot ${col.dotClass}`} />
+                    <span className="col-title">{col.title}</span>
+                  </div>
+                  <span className="col-count">{list.length}</span>
                 </div>
 
-                <div className="max-h-[72vh] space-y-3 overflow-auto p-3">
-                  <SortableContext items={byColumn[col.id].map((c) => c.id)} strategy={verticalListSortingStrategy}>
-                    {/* column drop zone by using column id as over target */}
-                    <div id={col.id} data-col={col.id} className="min-h-[20px]" />
-                    {byColumn[col.id].map((c) => (
-                      <CardTile
-                        key={c.id}
-                        card={c}
-                        thumbUrl={canvaThumb[c.id]}
-                        onEdit={() => {
-                          setEditing(c);
-                          setOpen(true);
-                        }}
-                        onPreview={() => {
-                          const embed = canvaEmbedUrl(c.canvaUrl || "");
-                          if (embed) setPreview({ title: c.title, url: embed });
-                        }}
-                      />
-                    ))}
-                  </SortableContext>
+                <div className="column-body">
+                  {list.map((card) => (
+                    <div
+                      key={card.id}
+                      className={`card ${draggingId === card.id ? "dragging" : ""}`}
+                      draggable
+                      onDragStart={(e) => {
+                        setDraggingId(card.id);
+                        e.dataTransfer.setData("text/plain", card.id);
+                        e.dataTransfer.effectAllowed = "move";
+                      }}
+                      onDragEnd={() => setDraggingId(null)}
+                      onClick={() => openEdit(card)}
+                    >
+                      <div className={`card-priority ${card.priority}`} />
+
+                      <div className="card-top">
+                        <span className={`card-platform ${card.platform}`}>{PLATFORM_LABEL[card.platform]}</span>
+                        <span className="card-slides">{card.slides || ""}</span>
+                      </div>
+
+                      <div className="card-title">{card.title}</div>
+                      <div className="card-desc">{card.desc || ""}</div>
+
+                      <div className="card-tags">
+                        {(card.tags || []).slice(0, 4).map((t) => (
+                          <span key={t} className={`tag ${t}`}>
+                            {t[0].toUpperCase() + t.slice(1)}
+                          </span>
+                        ))}
+                      </div>
+
+                      <div className="card-footer">
+                        <span className="card-date">{card.dueLabel || ""}</span>
+                        <div className={`card-assignee ${assigneeClass(card.assignee)}`}>{card.assignee}</div>
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="add-card" onClick={() => openNew(col.id)}>
+                    <span className="plus">+</span> Add sequence
+                  </div>
                 </div>
               </div>
-            ))}
-          </div>
-        </DndContext>
-      </main>
+            );
+          })}
+        </div>
+      </div>
 
-      {/* edit modal */}
+      {/* Edit Modal */}
       {open && editing && (
-        <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
-          <div className="relative mx-auto mt-10 w-[95%] max-w-2xl rounded-2xl bg-white p-5 shadow-xl">
-            <div className="flex items-start justify-between">
+        <div className="fixed inset-0 z-[200]">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
+          <div className="relative mx-auto mt-10 w-[95%] max-w-2xl rounded-2xl border border-white/10 bg-[rgba(17,6,48,0.92)] p-5 text-white shadow-2xl backdrop-blur">
+            <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="text-lg font-semibold">Edit story card</div>
-                <div className="text-xs text-slate-500">Canva link + status + notes.</div>
+                <div className="font-[Syne] text-lg font-extrabold">Edit Sequence</div>
+                <div className="mt-1 text-sm text-[var(--text-secondary)]">Paste Canva link, set tags, and keep things moving.</div>
               </div>
-              <button className="rounded-lg border border-slate-200 px-2 py-1 text-sm hover:bg-slate-50" onClick={() => setOpen(false)}>
+              <button
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
+                onClick={() => setOpen(false)}
+              >
                 Close
               </button>
             </div>
@@ -359,65 +326,17 @@ export default function Page() {
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <Field label="Title">
                 <input
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20"
                   value={editing.title}
                   onChange={(e) => setEditing({ ...editing, title: e.target.value })}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
                 />
-              </Field>
-
-              <Field label="Owner">
-                <select
-                  value={editing.owner}
-                  onChange={(e) => setEditing({ ...editing, owner: e.target.value as Card["owner"] })}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
-                >
-                  <option value="Symone">Symone</option>
-                  <option value="Editor">Editor</option>
-                </select>
-              </Field>
-
-              <Field label="Canva URL" className="md:col-span-2">
-                <input
-                  value={editing.canvaUrl || ""}
-                  onChange={(e) => setEditing({ ...editing, canvaUrl: e.target.value })}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
-                  placeholder="https://www.canva.com/design/..."
-                />
-                <div className="mt-1 flex items-center gap-2">
-                  <button
-                    className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs hover:bg-slate-50"
-                    onClick={() => {
-                      const embed = canvaEmbedUrl(editing.canvaUrl || "");
-                      if (embed) setPreview({ title: editing.title || "Canva", url: embed });
-                    }}
-                  >
-                    Preview
-                  </button>
-                  {editing.canvaUrl ? (
-                    <a className="text-xs text-sky-700 underline" href={editing.canvaUrl} target="_blank" rel="noreferrer">
-                      Open Canva
-                    </a>
-                  ) : null}
-                </div>
-              </Field>
-
-              <Field label="Priority">
-                <select
-                  value={editing.priority}
-                  onChange={(e) => setEditing({ ...editing, priority: e.target.value as Card["priority"] })}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
-                >
-                  <option value="High">High</option>
-                  <option value="Medium">Medium</option>
-                  <option value="Low">Low</option>
-                </select>
               </Field>
 
               <Field label="Status">
                 <select
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20"
                   value={editing.status}
                   onChange={(e) => setEditing({ ...editing, status: e.target.value as Card["status"] })}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
                 >
                   {Columns.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -427,53 +346,151 @@ export default function Page() {
                 </select>
               </Field>
 
-              <Field label="Due date">
-                <input
-                  type="date"
-                  value={editing.dueDate || ""}
-                  onChange={(e) => setEditing({ ...editing, dueDate: e.target.value })}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
+              <Field label="Description" className="md:col-span-2">
+                <textarea
+                  rows={3}
+                  className="w-full resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20"
+                  value={editing.desc || ""}
+                  onChange={(e) => setEditing({ ...editing, desc: e.target.value })}
                 />
               </Field>
 
-              <Field label="Approved by (optional)">
+              <Field label="Canva link" className="md:col-span-2">
                 <input
-                  value={editing.approvedBy || ""}
-                  onChange={(e) => setEditing({ ...editing, approvedBy: e.target.value })}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
-                  placeholder="Faiz / Symone"
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20"
+                  value={editing.canvaUrl || ""}
+                  onChange={(e) => setEditing({ ...editing, canvaUrl: e.target.value })}
+                  placeholder="https://www.canva.com/design/.../edit"
+                />
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
+                    onClick={() => {
+                      const embed = canvaEmbedUrl(editing.canvaUrl || "");
+                      if (embed) setPreview({ title: editing.title || "Canva", url: embed });
+                    }}
+                    type="button"
+                  >
+                    Preview
+                  </button>
+                  {editing.canvaUrl ? (
+                    <a
+                      className="text-sm text-[var(--sky)] underline"
+                      href={editing.canvaUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Open Canva
+                    </a>
+                  ) : null}
+                </div>
+              </Field>
+
+              <Field label="Platform">
+                <select
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20"
+                  value={editing.platform}
+                  onChange={(e) => setEditing({ ...editing, platform: e.target.value as Card["platform"] })}
+                >
+                  <option value="ig">IG Stories</option>
+                  <option value="tt">TikTok</option>
+                  <option value="tw">Twitter/X</option>
+                  <option value="yt">YouTube</option>
+                </select>
+              </Field>
+
+              <Field label="Slides / format">
+                <input
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20"
+                  value={editing.slides || ""}
+                  onChange={(e) => setEditing({ ...editing, slides: e.target.value })}
+                  placeholder='e.g. "7 slides" / "1 video"'
+                />
+              </Field>
+
+              <Field label="Priority">
+                <select
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20"
+                  value={editing.priority}
+                  onChange={(e) => setEditing({ ...editing, priority: e.target.value as Card["priority"] })}
+                >
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              </Field>
+
+              <Field label="Assignee">
+                <select
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20"
+                  value={editing.assignee}
+                  onChange={(e) => setEditing({ ...editing, assignee: e.target.value as Card["assignee"] })}
+                >
+                  <option value="F">F</option>
+                  <option value="J">J</option>
+                  <option value="M">M</option>
+                  <option value="A">A</option>
+                  <option value="S">S</option>
+                  <option value="E">E</option>
+                </select>
+              </Field>
+
+              <Field label="Due label">
+                <input
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20"
+                  value={editing.dueLabel || ""}
+                  onChange={(e) => setEditing({ ...editing, dueLabel: e.target.value })}
+                  placeholder='e.g. "Due Feb 6" or "Feb 5 · 9AM"'
+                />
+              </Field>
+
+              <Field label="Tags (comma-separated)" className="md:col-span-2">
+                <input
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20"
+                  value={(editing.tags || []).join(", ")}
+                  onChange={(e) =>
+                    setEditing({
+                      ...editing,
+                      tags: e.target.value
+                        .split(",")
+                        .map((x) => x.trim().toLowerCase())
+                        .filter(Boolean),
+                    })
+                  }
+                  placeholder="storytelling, viral"
                 />
               </Field>
 
               <Field label="Notes" className="md:col-span-2">
                 <textarea
+                  rows={4}
+                  className="w-full resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20"
                   value={editing.notes || ""}
                   onChange={(e) => setEditing({ ...editing, notes: e.target.value })}
-                  rows={5}
-                  className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
                 />
               </Field>
 
-              <div className="md:col-span-2 flex items-center justify-between pt-1">
+              <div className="md:col-span-2 flex items-center justify-between pt-2">
                 <button
-                  className="rounded-lg border border-red-200 bg-white px-3 py-2 text-sm text-red-700 hover:bg-red-50"
-                  onClick={() => {
-                    remove(editing.id);
-                    setOpen(false);
-                  }}
+                  className="rounded-lg border border-red-400/20 bg-red-500/10 px-3 py-2 text-sm text-red-200 hover:bg-red-500/20"
+                  onClick={deleteEdit}
+                  type="button"
                 >
                   Delete
                 </button>
+
                 <div className="flex items-center gap-2">
-                  <button className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50" onClick={() => setOpen(false)}>
+                  <button
+                    className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
+                    onClick={() => setOpen(false)}
+                    type="button"
+                  >
                     Cancel
                   </button>
                   <button
-                    className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
-                    onClick={() => {
-                      createOrUpdate(editing);
-                      setOpen(false);
-                    }}
+                    className="rounded-lg bg-[var(--purple-bright)] px-3 py-2 text-sm font-semibold text-white hover:brightness-110"
+                    onClick={saveEdit}
+                    type="button"
                   >
                     Save
                   </button>
@@ -484,18 +501,21 @@ export default function Page() {
         </div>
       )}
 
-      {/* Canva preview */}
+      {/* Canva Preview */}
       {preview && (
-        <div className="fixed inset-0 z-[60]">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setPreview(null)} />
-          <div className="relative mx-auto mt-6 w-[96%] max-w-5xl overflow-hidden rounded-2xl bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b px-4 py-3">
-              <div className="text-sm font-semibold truncate">{preview.title}</div>
-              <button className="rounded-lg border border-slate-200 px-2 py-1 text-sm hover:bg-slate-50" onClick={() => setPreview(null)}>
+        <div className="fixed inset-0 z-[300]">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setPreview(null)} />
+          <div className="relative mx-auto mt-6 w-[96%] max-w-5xl overflow-hidden rounded-2xl border border-white/10 bg-[rgba(17,6,48,0.92)] shadow-2xl backdrop-blur">
+            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+              <div className="truncate font-[Syne] text-sm font-bold">{preview.title}</div>
+              <button
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
+                onClick={() => setPreview(null)}
+              >
                 Close
               </button>
             </div>
-            <div className="aspect-[16/9] w-full bg-slate-100">
+            <div className="aspect-[16/9] w-full bg-black/20">
               <iframe
                 src={preview.url}
                 className="h-full w-full"
@@ -503,87 +523,27 @@ export default function Page() {
                 referrerPolicy="no-referrer"
               />
             </div>
-            <div className="border-t px-4 py-2 text-xs text-slate-500">
-              If Canva blocks embedding for a particular link, we’ll still show the Canva URL and open it in a new tab.
-            </div>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
 function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
     <div className={className}>
-      <div className="text-xs font-medium text-slate-600">{label}</div>
+      <div className="text-xs font-semibold text-[var(--text-secondary)]">{label}</div>
       <div className="mt-1">{children}</div>
     </div>
   );
 }
 
-function CardTile({
-  card,
-  thumbUrl,
-  onEdit,
-  onPreview,
-}: {
-  card: Card;
-  thumbUrl?: string;
-  onEdit: () => void;
-  onPreview: () => void;
-}) {
-  const due = card.dueDate ? new Date(card.dueDate).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : null;
-
-  const prioClass =
-    card.priority === "High"
-      ? "border-red-200 bg-red-50 text-red-700"
-      : card.priority === "Medium"
-        ? "border-amber-200 bg-amber-50 text-amber-800"
-        : "border-sky-200 bg-sky-50 text-sky-700";
-
-  const ownerClass = card.owner === "Symone" ? "border-indigo-200 bg-indigo-50 text-indigo-700" : "border-slate-200 bg-slate-50 text-slate-700";
-
-  return (
-    <button
-      onClick={onEdit}
-      className="w-full cursor-pointer rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm hover:shadow-md"
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="text-sm font-semibold leading-snug">{card.title}</div>
-        <div className="shrink-0 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-700">IG Story</div>
-      </div>
-
-      {thumbUrl ? (
-        <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={thumbUrl} alt="Canva preview" className="h-28 w-full object-cover" />
-        </div>
-      ) : null}
-
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] ${prioClass}`}>{card.priority}</span>
-        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] ${ownerClass}`}>{card.owner}</span>
-        {due ? <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-600">Due {due}</span> : null}
-      </div>
-
-      {card.canvaUrl ? (
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <div className="truncate text-xs text-sky-700 underline">{card.canvaUrl}</div>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onPreview();
-            }}
-            className="shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs hover:bg-slate-50"
-          >
-            Preview
-          </button>
-        </div>
-      ) : null}
-
-      {card.notes ? <div className="mt-2 line-clamp-3 text-xs text-slate-600">{card.notes}</div> : null}
-    </button>
-  );
+function assigneeClass(a: string) {
+  // mimic the sample a1..a4 gradients; map common letters.
+  if (a === "F") return "a1";
+  if (a === "J") return "a2";
+  if (a === "M") return "a3";
+  if (a === "A") return "a4";
+  return "a1";
 }
