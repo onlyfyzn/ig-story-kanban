@@ -292,6 +292,21 @@ export default function Page() {
                         <span className="card-slides">{card.slides || ""}</span>
                       </div>
 
+                      {card.canvaUrl ? (
+                        <button
+                          className="card-canva"
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const embed = canvaEmbedUrl(card.canvaUrl);
+                            if (embed) setPreview({ title: card.title || "Canva", url: embed });
+                          }}
+                          title="Preview Canva"
+                        >
+                          Canva preview
+                        </button>
+                      ) : null}
+
                       <div className="card-title">{card.title}</div>
                       <div className="card-desc">{card.desc || ""}</div>
 
