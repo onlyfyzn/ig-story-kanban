@@ -19,6 +19,31 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function decodeHtmlEntities(s: string) {
+  // minimal decode for common entities in Canva embed snippets
+  return s
+    .replaceAll("&amp;", "&")
+    .replaceAll("&#x2F;", "/")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&#39;", "'")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">");
+}
+
+function parseCanvaInput(input: string): string {
+  const raw = input.trim();
+  if (!raw) return "";
+
+  // If user pasted the full Canva embed snippet, extract the iframe src.
+  if (raw.includes("<iframe") || raw.includes("src=")) {
+    const decoded = decodeHtmlEntities(raw);
+    const m = decoded.match(/src=["']([^"']+)["']/i);
+    if (m?.[1]) return m[1];
+  }
+
+  return raw;
+}
+
 function demoCards(): Card[] {
   const t = nowIso();
   return [
@@ -340,8 +365,8 @@ export default function Page() {
                 <input
                   className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20"
                   value={editing.canvaUrl || ""}
-                  onChange={(e) => setEditing({ ...editing, canvaUrl: e.target.value })}
-                  placeholder="https://www.canva.com/design/.../edit"
+                  onChange={(e) => setEditing({ ...editing, canvaUrl: parseCanvaInput(e.target.value) })}
+                  placeholder="Paste Canva URL or Canva embed HTML snippet"
                 />
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <button
