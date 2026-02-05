@@ -328,9 +328,9 @@ export default function Page() {
 
       {/* Edit Modal */}
       {open && editing && (
-        <div className="fixed inset-0 z-[200]">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
-          <div className="relative mx-auto mt-10 w-[95%] max-w-2xl rounded-2xl border border-white/10 bg-[rgba(17,6,48,0.92)] p-7 md:p-8 text-white shadow-2xl backdrop-blur">
+          <div className="relative w-[96%] max-w-2xl rounded-2xl border border-white/10 bg-[rgba(17,6,48,0.92)] p-8 md:p-10 text-white shadow-2xl backdrop-blur">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="font-[Syne] text-lg font-extrabold">Edit Sequence</div>
@@ -344,10 +344,10 @@ export default function Page() {
               </button>
             </div>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
               <Field label="Title">
                 <input
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20"
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20"
                   value={editing.title}
                   onChange={(e) => setEditing({ ...editing, title: e.target.value })}
                 />
@@ -355,7 +355,7 @@ export default function Page() {
 
               <Field label="Status">
                 <select
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20"
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20"
                   value={editing.status}
                   onChange={(e) => setEditing({ ...editing, status: e.target.value as Card["status"] })}
                 >
@@ -370,7 +370,7 @@ export default function Page() {
               <Field label="Description" className="md:col-span-2">
                 <textarea
                   rows={3}
-                  className="w-full resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20"
+                  className="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20"
                   value={editing.desc || ""}
                   onChange={(e) => setEditing({ ...editing, desc: e.target.value })}
                 />
@@ -378,7 +378,7 @@ export default function Page() {
 
               <Field label="Canva link" className="md:col-span-2">
                 <input
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20"
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20"
                   value={editing.canvaUrl || ""}
                   onChange={(e) => setEditing({ ...editing, canvaUrl: parseCanvaInput(e.target.value) })}
                   placeholder="Paste Canva URL or Canva embed HTML snippet"
@@ -409,7 +409,7 @@ export default function Page() {
 
               <Field label="Platform">
                 <select
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20"
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20"
                   value={editing.platform}
                   onChange={(e) => setEditing({ ...editing, platform: e.target.value as Card["platform"] })}
                 >
@@ -422,7 +422,7 @@ export default function Page() {
 
               <Field label="Slides / format">
                 <input
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20"
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20"
                   value={editing.slides || ""}
                   onChange={(e) => setEditing({ ...editing, slides: e.target.value })}
                   placeholder='e.g. "7 slides" / "1 video"'
@@ -431,7 +431,7 @@ export default function Page() {
 
               <Field label="Priority">
                 <select
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20"
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20"
                   value={editing.priority}
                   onChange={(e) => setEditing({ ...editing, priority: e.target.value as Card["priority"] })}
                 >
@@ -441,19 +441,19 @@ export default function Page() {
                 </select>
               </Field>
 
-              <Field label="Due label">
+              <Field label="Due date">
                 <input
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20"
+                  type="date"
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20"
                   value={editing.dueLabel || ""}
                   onChange={(e) => setEditing({ ...editing, dueLabel: e.target.value })}
-                  placeholder='e.g. "Due Feb 6" or "Feb 5 · 9AM"'
                 />
               </Field>
 
               <Field label="Notes" className="md:col-span-2">
                 <textarea
                   rows={4}
-                  className="w-full resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20"
+                  className="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20"
                   value={editing.notes || ""}
                   onChange={(e) => setEditing({ ...editing, notes: e.target.value })}
                 />
@@ -523,7 +523,7 @@ function Field({ label, children, className }: { label: string; children: React.
   return (
     <div className={className}>
       <div className="text-xs font-semibold text-[var(--text-secondary)]">{label}</div>
-      <div className="mt-1">{children}</div>
+      <div className="mt-2">{children}</div>
     </div>
   );
 }
