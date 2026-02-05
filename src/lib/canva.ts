@@ -14,6 +14,15 @@ export function canvaEmbedUrl(input?: string): string | null {
     const designIdx = parts.indexOf("design");
     if (designIdx >= 0 && parts[designIdx + 1]) {
       const designId = parts[designIdx + 1];
+      const maybeToken = parts[designIdx + 2];
+
+      // Canva share links often include a second path segment token:
+      //   /design/<DESIGN_ID>/<TOKEN>/view
+      // Preserve it, otherwise embeds can show "no permission" even if the link is open.
+      if (maybeToken && maybeToken !== "view" && maybeToken !== "edit") {
+        return `https://www.canva.com/design/${designId}/${maybeToken}/view?embed`;
+      }
+
       return `https://www.canva.com/design/${designId}/view?embed`;
     }
 
