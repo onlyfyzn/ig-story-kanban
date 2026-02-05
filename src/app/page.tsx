@@ -30,9 +30,7 @@ function demoCards(): Card[] {
       slides: "7 slides",
       title: "Commission Horror Story #4",
       desc: "Rep gets ghosted after $12K deal closes. Text screenshots + reveal.",
-      tags: ["storytelling", "viral"],
       dueLabel: "Due Feb 6",
-      assignee: "F",
       canvaUrl: "",
       notes: "",
       createdAt: t,
@@ -46,9 +44,7 @@ function demoCards(): Card[] {
       slides: "5 slides",
       title: '"3 Signs Your Commission is Being Stolen"',
       desc: "Educational sequence with red flags every sales rep should know.",
-      tags: ["educational", "hook"],
       dueLabel: "Due Feb 8",
-      assignee: "J",
       canvaUrl: "",
       notes: "",
       createdAt: t,
@@ -62,9 +58,7 @@ function demoCards(): Card[] {
       slides: "4 slides",
       title: '"I Lost $45K in Unpaid Commissions"',
       desc: "Thread-style story sequence. Personal testimony format.",
-      tags: ["testimonial", "viral"],
       dueLabel: "Due Feb 7",
-      assignee: "F",
       canvaUrl: "",
       notes: "",
       createdAt: t,
@@ -78,9 +72,7 @@ function demoCards(): Card[] {
       slides: "8 slides",
       title: "Commission Horror Story #2",
       desc: "Full sequence approved. Posting Wed 9 AM EST for peak engagement.",
-      tags: ["storytelling", "viral"],
       dueLabel: "Feb 5 · 9AM",
-      assignee: "F",
       canvaUrl: "",
       notes: "",
       createdAt: t,
@@ -166,9 +158,7 @@ export default function Page() {
       slides: "",
       title: "",
       desc: "",
-      tags: [],
       dueLabel: "",
-      assignee: "F",
       canvaUrl: "",
       notes: "",
       createdAt: t,
@@ -280,17 +270,8 @@ export default function Page() {
                       <div className="card-title">{card.title}</div>
                       <div className="card-desc">{card.desc || ""}</div>
 
-                      <div className="card-tags">
-                        {(card.tags || []).slice(0, 4).map((t) => (
-                          <span key={t} className={`tag ${t}`}>
-                            {t[0].toUpperCase() + t.slice(1)}
-                          </span>
-                        ))}
-                      </div>
-
                       <div className="card-footer">
                         <span className="card-date">{card.dueLabel || ""}</span>
-                        <div className={`card-assignee ${assigneeClass(card.assignee)}`}>{card.assignee}</div>
                       </div>
                     </div>
                   ))}
@@ -309,11 +290,11 @@ export default function Page() {
       {open && editing && (
         <div className="fixed inset-0 z-[200]">
           <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
-          <div className="relative mx-auto mt-10 w-[95%] max-w-2xl rounded-2xl border border-white/10 bg-[rgba(17,6,48,0.92)] p-5 text-white shadow-2xl backdrop-blur">
+          <div className="relative mx-auto mt-10 w-[95%] max-w-2xl rounded-2xl border border-white/10 bg-[rgba(17,6,48,0.92)] p-7 md:p-8 text-white shadow-2xl backdrop-blur">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="font-[Syne] text-lg font-extrabold">Edit Sequence</div>
-                <div className="mt-1 text-sm text-[var(--text-secondary)]">Paste Canva link, set tags, and keep things moving.</div>
+                <div className="mt-1 text-sm text-[var(--text-secondary)]">Paste Canva link and keep things moving.</div>
               </div>
               <button
                 className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
@@ -420,44 +401,12 @@ export default function Page() {
                 </select>
               </Field>
 
-              <Field label="Assignee">
-                <select
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20"
-                  value={editing.assignee}
-                  onChange={(e) => setEditing({ ...editing, assignee: e.target.value as Card["assignee"] })}
-                >
-                  <option value="F">F</option>
-                  <option value="J">J</option>
-                  <option value="M">M</option>
-                  <option value="A">A</option>
-                  <option value="S">S</option>
-                  <option value="E">E</option>
-                </select>
-              </Field>
-
               <Field label="Due label">
                 <input
                   className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20"
                   value={editing.dueLabel || ""}
                   onChange={(e) => setEditing({ ...editing, dueLabel: e.target.value })}
                   placeholder='e.g. "Due Feb 6" or "Feb 5 · 9AM"'
-                />
-              </Field>
-
-              <Field label="Tags (comma-separated)" className="md:col-span-2">
-                <input
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20"
-                  value={(editing.tags || []).join(", ")}
-                  onChange={(e) =>
-                    setEditing({
-                      ...editing,
-                      tags: e.target.value
-                        .split(",")
-                        .map((x) => x.trim().toLowerCase())
-                        .filter(Boolean),
-                    })
-                  }
-                  placeholder="storytelling, viral"
                 />
               </Field>
 
@@ -539,11 +488,4 @@ function Field({ label, children, className }: { label: string; children: React.
   );
 }
 
-function assigneeClass(a: string) {
-  // mimic the sample a1..a4 gradients; map common letters.
-  if (a === "F") return "a1";
-  if (a === "J") return "a2";
-  if (a === "M") return "a3";
-  if (a === "A") return "a4";
-  return "a1";
-}
+// assignee field removed

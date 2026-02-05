@@ -4,8 +4,6 @@ export const ColumnId = z.enum(["script", "design", "review", "scheduled", "publ
 
 export const Priority = z.enum(["high", "medium", "low"]);
 export const Platform = z.enum(["ig", "tt", "yt", "tw"]);
-export const Assignee = z.enum(["F", "J", "M", "A", "S", "E"]);
-
 export const CardSchema = z.object({
   id: z.string(),
   title: z.string().min(1),
@@ -15,8 +13,6 @@ export const CardSchema = z.object({
   dueLabel: z.string().optional().or(z.literal("")), // e.g. "Due Feb 6" or "Feb 5 · 9AM"
   platform: Platform,
   slides: z.string().optional().or(z.literal("")), // e.g. "7 slides" / "1 video"
-  tags: z.array(z.string()).default([]),
-  assignee: Assignee,
   priority: Priority,
   status: ColumnId,
   createdAt: z.string(),
