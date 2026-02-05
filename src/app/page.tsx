@@ -328,9 +328,9 @@ export default function Page() {
 
       {/* Edit Modal */}
       {open && editing && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 md:p-10">
           <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
-          <div className="relative w-[96%] max-w-2xl rounded-2xl border border-white/10 bg-[rgba(17,6,48,0.92)] p-8 md:p-10 text-white shadow-2xl backdrop-blur">
+          <div className="relative w-full max-w-2xl rounded-2xl border border-white/10 bg-[rgba(17,6,48,0.92)] p-8 md:p-10 text-white shadow-2xl backdrop-blur">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="font-[Syne] text-lg font-extrabold">Edit Sequence</div>
